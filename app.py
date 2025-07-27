@@ -14,7 +14,7 @@ st.title("PDF Rename")
 st.write("""
 Upload your PDF(s) below.  
 The file will be renamed based on the name, start date, and end date in the PDF.  
-Supports \n
+Supports
 Individual Upload and Download as single file\n
 Batch Upload and Download as zipped file\n
 **🔒 Note:** Files uploaded here are only visible to you. Other users cannot access your files or downloads.
