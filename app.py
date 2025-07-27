@@ -18,7 +18,8 @@ The file will be renamed based on the name, start date, and end date in the PDF.
 - Individual upload and download as a single file  
 - Batch upload and download as a zipped file
 
-**🔒 Note:** Files uploaded here are only visible to you. Other users cannot access your files or downloads.
+**🔒 Note:**  
+Files uploaded here are only visible to you. Other users cannot access your files or downloads.
 """)
 
 
