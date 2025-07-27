@@ -12,7 +12,7 @@ st.set_page_config(page_title="PDF Renamer", page_icon="📄")
 st.title("PDF Renamer")
 
 st.write("""
-Upload your PDF(s) below. The file will be renamed based on the name, start date, and end date in the PDF.
+Upload your PDF(s) below. \n The file will be renamed based on the name, start date, and end date in the PDF.
 
 **🔒 Note:** Files uploaded here are only visible to you. Other users cannot access your files or downloads.
 """)
