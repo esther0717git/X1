@@ -1,2 +1,5 @@
 streamlit
 PyMuPDF
+pdf2image
+pytesseract
+Pillow
