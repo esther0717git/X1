@@ -9,7 +9,7 @@ from PIL import Image
 import zipfile
 
 st.set_page_config(page_title="PDF Renamer", page_icon="📄")
-st.title("PDF Renamer for Work Orders")
+st.title("PDF Renamer for Order Slips")
 st.write("""Upload your PDF(s) below. The file will be renamed based on the name, start date, and end date in the PDF.
 
 **🔒 Note:** Files uploaded here are only visible to you. Other users cannot access your files or downloads.""")
@@ -30,12 +30,12 @@ def extract_text_from_pdf(pdf_file):
 
 def extract_info_from_text(text):
     # Extract Name (first last)
-    name_match = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+)", text)
+    name_match = re.search(r"([A-Z][a-z]+\s[A-Z][a-z]+)", text)
     name = name_match.group(1).replace(" ", "_") if name_match else "Unknown_Name"
 
-    # Extract 3rd line as identifier
-    lines = text.strip().splitlines()
-    dc_value = lines[2].strip().replace(" ", "_") if len(lines) >= 3 else "DCXX"
+    # Extract DC Line (third line)
+    dc_match = re.search(r"^.*\n.*\n(DC\d+)", text, re.MULTILINE)
+    dc_value = dc_match.group(1) if dc_match else "DCXX"
 
     # Extract Start Date
     start_match = re.search(r"Start Date\s*:\s*(\d{2}-\w{3}-\d{4})", text)
@@ -56,13 +56,17 @@ def extract_info_from_text(text):
     except:
         end_dt = None
 
-    # Build filenames
+    # Build zip filename and individual file name with custom format
     if start_dt and end_dt:
-        file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.pdf"
-        zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
+        if start_dt.strftime("%Y-%m") == end_dt.strftime("%Y-%m"):
+            zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
+            file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%d')}.pdf"
+        else:
+            zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
+            file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.pdf"
     else:
-        file_label = f"{dc_value}_{name}_UnknownDate.pdf"
         zip_label = f"{dc_value}_UnknownDate.zip"
+        file_label = f"{dc_value}_{name}_UnknownDate.pdf"
 
     return file_label, zip_label
 
