@@ -28,14 +28,21 @@ def extract_text_from_pdf(pdf_file):
         return text
 
 
+import re
+
+def sanitize_filename(text):
+    text = text.strip().replace(" ", "_")
+    text = re.sub(r"[^A-Za-z0-9_\\-]", "", text)
+    return text
+
 def extract_info_from_text(text):
     # Extract Name (first last)
-    name_match = re.search(r"([A-Z][a-z]+\s[A-Z][a-z]+)", text)
+    name_match = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+)", text)
     name = name_match.group(1).replace(" ", "_") if name_match else "Unknown_Name"
 
-    # Extract DC Line (third line)
-    dc_match = re.search(r"^.*\n.*\n(DC\d+)", text, re.MULTILINE)
-    dc_value = dc_match.group(1) if dc_match else "DCXX"
+    # Extract 3rd non-empty line as DC value
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    dc_value = sanitize_filename(lines[2]) if len(lines) >= 3 else "DCXX"
 
     # Extract Start Date
     start_match = re.search(r"Start Date\s*:\s*(\d{2}-\w{3}-\d{4})", text)
@@ -56,17 +63,13 @@ def extract_info_from_text(text):
     except:
         end_dt = None
 
-    # Build zip filename and individual file name with custom format
+    # Build filenames
     if start_dt and end_dt:
-        if start_dt.strftime("%Y-%m") == end_dt.strftime("%Y-%m"):
-            zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
-            file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%d')}.pdf"
-        else:
-            zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
-            file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.pdf"
+        file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.pdf"
+        zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
     else:
-        zip_label = f"{dc_value}_UnknownDate.zip"
         file_label = f"{dc_value}_{name}_UnknownDate.pdf"
+        zip_label = f"{dc_value}_UnknownDate.zip"
 
     return file_label, zip_label
 
