@@ -9,8 +9,10 @@ from PIL import Image
 import zipfile
 
 st.set_page_config(page_title="PDF Renamer", page_icon="📄")
-st.title("PDF Rename")
-st.write("Upload your PDF(s) below. The file will be renamed based on the name, start date, and end date in the PDF.")
+st.title("PDF Renamer for Order Slips")
+st.write("Upload your PDF(s) below. The file will be renamed based on the name, start date, and end date in the PDF.
+
+**🔒 Note:** Files uploaded here are only visible to you. Other users cannot access your files or downloads.")
 
 
 def extract_text_from_pdf(pdf_file):
@@ -31,6 +33,10 @@ def extract_info_from_text(text):
     name_match = re.search(r"([A-Z][a-z]+\s[A-Z][a-z]+)", text)
     name = name_match.group(1).replace(" ", "_") if name_match else "Unknown_Name"
 
+    # Extract DC Line (third line)
+    dc_match = re.search(r"^.*\n.*\n(DC\d+)", text, re.MULTILINE)
+    dc_value = dc_match.group(1) if dc_match else "DCXX"
+
     # Extract Start Date
     start_match = re.search(r"Start Date\s*:\s*(\d{2}-\w{3}-\d{4})", text)
     start_date = start_match.group(1) if start_match else "UnknownStart"
@@ -39,31 +45,43 @@ def extract_info_from_text(text):
     end_match = re.search(r"End Date\s*:\s*(\d{2}-\w{3}-\d{4})", text)
     end_date = end_match.group(1) if end_match else "UnknownEnd"
 
-    # Format date to YYYY-MM-DD
+    # Format dates
     try:
-        start_date_fmt = datetime.strptime(start_date, "%d-%b-%Y").strftime("%Y-%m-%d")
+        start_dt = datetime.strptime(start_date, "%d-%b-%Y")
     except:
-        start_date_fmt = start_date
+        start_dt = None
 
     try:
-        end_date_fmt = datetime.strptime(end_date, "%d-%b-%Y").strftime("%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%d-%b-%Y")
     except:
-        end_date_fmt = end_date
+        end_dt = None
 
-    new_filename = f"{name}_{start_date_fmt}_{end_date_fmt}.pdf"
-    return new_filename
+    # Build zip filename and individual file name with custom format
+    if start_dt and end_dt:
+        if start_dt.strftime("%Y-%m") == end_dt.strftime("%Y-%m"):
+            zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
+            file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%d')}.pdf"
+        else:
+            zip_label = f"{dc_value}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
+            file_label = f"{dc_value}_{name}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.pdf"
+    else:
+        zip_label = f"{dc_value}_UnknownDate.zip"
+        file_label = f"{dc_value}_{name}_UnknownDate.pdf"
+
+    return file_label, zip_label
 
 
 uploaded_files = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
 
 renamed_files = []
+zip_filename = "renamed_pdfs.zip"  # Default
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
         st.write(f"Processing: {uploaded_file.name}")
         try:
             text = extract_text_from_pdf(uploaded_file)
-            new_name = extract_info_from_text(text)
+            new_name, zip_filename = extract_info_from_text(text)
             uploaded_file.seek(0)
             file_bytes = uploaded_file.read()
             renamed_files.append((new_name, file_bytes))
@@ -86,6 +104,6 @@ if uploaded_files:
         st.download_button(
             label="📁 Download All as ZIP",
             data=zip_buffer,
-            file_name="renamed_pdfs.zip",
+            file_name=zip_filename,
             mime="application/zip"
         )
