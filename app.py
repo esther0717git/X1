@@ -8,7 +8,7 @@ import pytesseract
 from PIL import Image
 import zipfile
 
-st.set_page_config(page_title="PDF Renamer", page_icon="📄")
+st.set_page_config(page_title="PDF Rename", page_icon="📄")
 st.title("PDF Renamer")
 
 st.write("""
