@@ -6,6 +6,7 @@ from datetime import datetime
 from pdf2image import convert_from_bytes
 import pytesseract
 from PIL import Image
+import zipfile
 
 st.set_page_config(page_title="PDF Renamer", page_icon="📄")
 st.title("PDF Renamer for Order Slips")
@@ -55,19 +56,36 @@ def extract_info_from_text(text):
 
 uploaded_files = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
 
+renamed_files = []
+
 if uploaded_files:
     for uploaded_file in uploaded_files:
         st.write(f"Processing: {uploaded_file.name}")
         try:
             text = extract_text_from_pdf(uploaded_file)
             new_name = extract_info_from_text(text)
-            uploaded_file.seek(0)  # reset pointer for download
+            uploaded_file.seek(0)
+            file_bytes = uploaded_file.read()
+            renamed_files.append((new_name, file_bytes))
             st.success(f"Renamed to: {new_name}")
             st.download_button(
                 label="🔀 Download Renamed PDF",
-                data=uploaded_file.read(),
+                data=file_bytes,
                 file_name=new_name,
                 mime="application/pdf"
             )
         except Exception as e:
             st.error(f"Failed to process {uploaded_file.name}: {e}")
+
+    if renamed_files:
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zipf:
+            for filename, content in renamed_files:
+                zipf.writestr(filename, content)
+        zip_buffer.seek(0)
+        st.download_button(
+            label="📁 Download All as ZIP",
+            data=zip_buffer,
+            file_name="renamed_pdfs.zip",
+            mime="application/zip"
+        )
