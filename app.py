@@ -12,13 +12,15 @@ st.set_page_config(page_title="PDF Rename", page_icon="📄")
 st.title("PDF Rename")
 
 st.write("""
-Upload your PDF(s) below.  
-The file will be renamed based on the name, start date, and end date in the PDF.  
-Supports
-Individual Upload and Download as single file\n
-Batch Upload and Download as zipped file\n
+The file will be renamed based on the name, start date, and end date in the PDF.
+
+**Supports:**
+- Individual upload and download as a single file  
+- Batch upload and download as a zipped file
+
 **🔒 Note:** Files uploaded here are only visible to you. Other users cannot access your files or downloads.
 """)
+
 
 # Function to extract text from PDF or fallback to OCR
 def extract_text_from_pdf(pdf_file):
