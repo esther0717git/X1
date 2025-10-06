@@ -38,8 +38,8 @@ def extract_text_from_pdf(pdf_file):
 
 # Function to extract name and dates and create filename + zipname
 def extract_info_from_text(text):
-    # Extract Name (First Last)
-    name_match = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+)", text)
+    # ✅ Updated regex to capture up to 4 consecutive capitalized words (person name)
+    name_match = re.search(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})\b", text)
     name = name_match.group(1).replace(" ", "_") if name_match else "Unknown_Name"
 
     # Extract Start Date
