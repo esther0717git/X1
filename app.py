@@ -47,12 +47,16 @@ def clean_name(raw: str) -> str:
 def looks_like_company(text: str) -> bool:
     return bool(COMPANY_HINTS.search(text))
 
+def has_single_letter_token(text: str) -> bool:
+    # True if any token is a single A–Z letter (e.g., "T G")
+    return any(len(tok) == 1 for tok in re.findall(r"[A-Za-z]+", text))
+
 def find_full_name(text: str) -> str | None:
     """
     Extract the *first person name*:
       1) First labeled name line (Name:, Employee Name:, etc.)
       2) Otherwise, the first multi-word capitalized phrase (2–5 tokens) that does NOT look like a company.
-      3) ALL-CAPS fallback (also excluding company-looking phrases)
+      3) ALL-CAPS fallback (tokens must be 2+ letters), excluding company-ish phrases and single-letter tokens.
     """
     # 1) Labeled line first
     labeled_pat = re.compile(
@@ -61,7 +65,7 @@ def find_full_name(text: str) -> str | None:
     )
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     for ln in lines:
-        if BAD_DATE_CTX.search(ln):
+        if BAD_DATE_CTX.search(ln) or looks_like_company(ln):
             continue
         m = labeled_pat.search(ln)
         if m:
@@ -75,28 +79,25 @@ def find_full_name(text: str) -> str | None:
     patt_mixed = re.compile(rf"\b({token}(?:\s+{token}){{1,4}})\b")
     for m in patt_mixed.finditer(text):
         span_text = m.group(1)
-        if BAD_DATE_CTX.search(span_text):
+        if BAD_DATE_CTX.search(span_text) or looks_like_company(span_text):
             continue
-        if not looks_like_company(span_text):
-            return clean_name(span_text)
+        return clean_name(span_text)
 
-    # 3) ALL-CAPS fallback (e.g., OCR or forms), still avoiding company-ish phrases
-    token_caps = r"(?:[A-Z]+(?:[-'][A-Z]+)?)"
+    # 3) ALL-CAPS fallback (require tokens of **2+ letters**; ignore single-letter tokens)
+    token_caps = r"(?:[A-Z]{2,}(?:[-'][A-Z]{2,})?)"
     patt_caps = re.compile(rf"\b(({token_caps})(?:\s+{token_caps}){{1,4}})\b")
     for m in patt_caps.finditer(text):
         span_text = m.group(1)
-        if BAD_DATE_CTX.search(span_text):
+        if BAD_DATE_CTX.search(span_text) or looks_like_company(span_text):
             continue
-        if not looks_like_company(span_text):
-            return clean_name(span_text)
+        if has_single_letter_token(span_text):
+            continue
+        return clean_name(span_text)
 
     return None
 
 def extract_text_from_pdf(uploaded) -> str:
-    """
-    Extract text via PyMuPDF; fall back to OCR if needed.
-    Reads the file once to bytes so we can reuse it.
-    """
+    """Extract text via PyMuPDF; fall back to OCR if needed."""
     uploaded.seek(0)
     pdf_bytes = uploaded.read()
     try:
@@ -125,7 +126,6 @@ def extract_info_from_text(text: str):
     start_date = start_match.group(1) if start_match else "UnknownStart"
     end_date   = end_match.group(1)   if end_match   else "UnknownEnd"
 
-    # --- Labels ---
     try:
         start_dt = datetime.strptime(start_date, "%d-%b-%Y")
         end_dt   = datetime.strptime(end_date,   "%d-%b-%Y")
