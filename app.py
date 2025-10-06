@@ -25,12 +25,18 @@ Files uploaded here are only visible to you. Other users cannot access your file
 
 # ---------------- Helpers ----------------
 MONTHS = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)"
-BAD_CTX = re.compile(rf"start\s*date|end\s*date|{MONTHS}", re.IGNORECASE)
+BAD_DATE_CTX = re.compile(rf"start\s*date|end\s*date|{MONTHS}", re.IGNORECASE)
+
+# Phrases that strongly indicate a company, not a person
+COMPANY_HINTS = re.compile(
+    r"(?:\bcompany\b|\bco\b\.?|private\s+limited|pte\s+ltd|limited|ltd|inc|corp(?:oration)?|"
+    r"technology|technologies|solutions?|holdings?|group|plc|llc|llp)",
+    re.IGNORECASE
+)
 
 def clean_name(raw: str) -> str:
     """Normalize spacing/casing for names, keep hyphens/apostrophes."""
     name = re.sub(r"\s+", " ", raw).strip(" \t:-")
-    # Title-case tokens, preserving - and '
     parts = []
     for token in name.split(" "):
         t = "-".join(p.capitalize() if p else p for p in token.split("-"))
@@ -38,46 +44,51 @@ def clean_name(raw: str) -> str:
         parts.append(t)
     return " ".join(parts)
 
+def looks_like_company(text: str) -> bool:
+    return bool(COMPANY_HINTS.search(text))
+
 def find_full_name(text: str) -> str | None:
     """
-    Extract a likely full name:
-      1) Labeled line: 'Name:', 'Full Name:', 'Customer Name:' etc.
-      2) Multi-word capitalized phrase (2–5 tokens, supports - and ')
-      3) ALL-CAPS variant (then title-cased)
-    Avoids lines with dates/months/labels.
+    Extract the *first person name*:
+      1) First labeled name line (Name:, Employee Name:, etc.)
+      2) Otherwise, the first multi-word capitalized phrase (2–5 tokens) that does NOT look like a company.
+      3) ALL-CAPS fallback (also excluding company-looking phrases)
     """
-    # 1) Labeled line
+    # 1) Labeled line first
     labeled_pat = re.compile(
         r"^(?:customer\s+name|employee\s+name|full\s*name|name)\s*:?\s*(.+)$",
         re.IGNORECASE
     )
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     for ln in lines:
-        if BAD_CTX.search(ln):
+        if BAD_DATE_CTX.search(ln):
             continue
         m = labeled_pat.search(ln)
         if m:
             cand = re.sub(r"[^A-Za-z\s\-']", " ", m.group(1))
             cand = re.sub(r"\s+", " ", cand).strip()
-            if 2 <= len(cand.split()) <= 5:
+            if 2 <= len(cand.split()) <= 5 and not looks_like_company(cand):
                 return clean_name(cand)
 
-    # Common name token: Zhang / Jian / Liang / O'Connor / Jean-Luc
+    # 2) First mixed-case multiword name (2–5 tokens), skipping company-looking phrases
     token = r"(?:[A-Z][a-z]+(?:[-'][A-Za-z]+)?)"
-
-    # 2) Mixed-case multiword names (2–5 tokens)
     patt_mixed = re.compile(rf"\b({token}(?:\s+{token}){{1,4}})\b")
-    candidates = [m.group(1) for m in patt_mixed.finditer(text) if not BAD_CTX.search(m.group(1))]
-    if candidates:
-        # Prefer the longest (e.g., 'Zhang Jian Liang' over 'Zhang Jian')
-        return clean_name(max(candidates, key=lambda s: (len(s.split()), len(s))))
+    for m in patt_mixed.finditer(text):
+        span_text = m.group(1)
+        if BAD_DATE_CTX.search(span_text):
+            continue
+        if not looks_like_company(span_text):
+            return clean_name(span_text)
 
-    # 3) ALL-CAPS multiword names (2–5 tokens)
+    # 3) ALL-CAPS fallback (e.g., OCR or forms), still avoiding company-ish phrases
     token_caps = r"(?:[A-Z]+(?:[-'][A-Z]+)?)"
     patt_caps = re.compile(rf"\b(({token_caps})(?:\s+{token_caps}){{1,4}})\b")
-    candidates = [m.group(1) for m in patt_caps.finditer(text) if not BAD_CTX.search(m.group(1))]
-    if candidates:
-        return clean_name(max(candidates, key=lambda s: (len(s.split()), len(s))))
+    for m in patt_caps.finditer(text):
+        span_text = m.group(1)
+        if BAD_DATE_CTX.search(span_text):
+            continue
+        if not looks_like_company(span_text):
+            return clean_name(span_text)
 
     return None
 
@@ -104,11 +115,11 @@ def extract_text_from_pdf(uploaded) -> str:
         return ""
 
 def extract_info_from_text(text: str):
-    # --- Name ---
+    # --- Name (person) ---
     name = find_full_name(text)
     name_slug = name.replace(" ", "_") if name else "Unknown_Name"
 
-    # --- Dates (supports 'Start Date: 01-Jan-2025' style) ---
+    # --- Dates ---
     start_match = re.search(r"Start\s*Date\s*:\s*(\d{2}-[A-Za-z]{3}-\d{4})", text, re.IGNORECASE)
     end_match   = re.search(r"End\s*Date\s*:\s*(\d{2}-[A-Za-z]{3}-\d{4})",   text, re.IGNORECASE)
     start_date = start_match.group(1) if start_match else "UnknownStart"
@@ -139,7 +150,7 @@ if uploaded_files:
             text = extract_text_from_pdf(uploaded_file)
             new_name, zip_filename = extract_info_from_text(text)
 
-            # Re-read bytes for download since we consumed earlier
+            # Re-read bytes for download
             uploaded_file.seek(0)
             file_bytes = uploaded_file.read()
             renamed_files.append((new_name, file_bytes))
