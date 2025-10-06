@@ -8,7 +8,6 @@ import pytesseract
 from PIL import Image
 import zipfile
 
-# ---------------- UI ----------------
 st.set_page_config(page_title="PDF Rename", page_icon="📄")
 st.title("PDF Rename")
 
@@ -23,19 +22,17 @@ The file will be renamed based on the name, start date, and end date in the PDF.
 Files uploaded here are only visible to you. Other users cannot access your files or downloads.
 """)
 
-# ---------------- Helpers ----------------
+# ---------- Helpers for names ----------
 MONTHS = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)"
-BAD_DATE_CTX = re.compile(rf"start\s*date|end\s*date|{MONTHS}", re.IGNORECASE)
-
-# Phrases that strongly indicate a company, not a person
+BAD_CTX = re.compile(rf"start\s*date|end\s*date|{MONTHS}", re.IGNORECASE)
 COMPANY_HINTS = re.compile(
     r"(?:\bcompany\b|\bco\b\.?|private\s+limited|pte\s+ltd|limited|ltd|inc|corp(?:oration)?|"
     r"technology|technologies|solutions?|holdings?|group|plc|llc|llp)",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
-def clean_name(raw: str) -> str:
-    """Normalize spacing/casing for names, keep hyphens/apostrophes."""
+def clean_name(raw):
+    # normalize spaces & smart title-case while preserving - and '
     name = re.sub(r"\s+", " ", raw).strip(" \t:-")
     parts = []
     for token in name.split(" "):
@@ -44,28 +41,24 @@ def clean_name(raw: str) -> str:
         parts.append(t)
     return " ".join(parts)
 
-def looks_like_company(text: str) -> bool:
-    return bool(COMPANY_HINTS.search(text))
+def looks_like_company(s):
+    return bool(COMPANY_HINTS.search(s))
 
-def has_single_letter_token(text: str) -> bool:
-    # True if any token is a single A–Z letter (e.g., "T G")
-    return any(len(tok) == 1 for tok in re.findall(r"[A-Za-z]+", text))
+def has_single_letter_token(s):
+    return any(len(tok) == 1 for tok in re.findall(r"[A-Za-z]+", s))
 
-def find_full_name(text: str) -> str | None:
+def find_person_name(text):
     """
-    Extract the *first person name*:
-      1) First labeled name line (Name:, Employee Name:, etc.)
-      2) Otherwise, the first multi-word capitalized phrase (2–5 tokens) that does NOT look like a company.
-      3) ALL-CAPS fallback (tokens must be 2+ letters), excluding company-ish phrases and single-letter tokens.
+    Return the FIRST person-like name:
+      1) labeled 'Name:' line
+      2) first mixed-case multiword name (2–5 tokens)
+      3) ALL-CAPS fallback (tokens >=2 chars)
+    All while skipping company-ish phrases and date-ish lines.
     """
-    # 1) Labeled line first
-    labeled_pat = re.compile(
-        r"^(?:customer\s+name|employee\s+name|full\s*name|name)\s*:?\s*(.+)$",
-        re.IGNORECASE
-    )
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    for ln in lines:
-        if BAD_DATE_CTX.search(ln) or looks_like_company(ln):
+    # 1) labeled fields
+    labeled_pat = re.compile(r"^(?:customer\s+name|employee\s+name|full\s*name|name)\s*:?\s*(.+)$", re.IGNORECASE)
+    for ln in (ln.strip() for ln in text.splitlines() if ln.strip()):
+        if BAD_CTX.search(ln) or looks_like_company(ln):
             continue
         m = labeled_pat.search(ln)
         if m:
@@ -74,70 +67,64 @@ def find_full_name(text: str) -> str | None:
             if 2 <= len(cand.split()) <= 5 and not looks_like_company(cand):
                 return clean_name(cand)
 
-    # 2) First mixed-case multiword name (2–5 tokens), skipping company-looking phrases
+    # 2) mixed-case multiword (2–5 tokens)
     token = r"(?:[A-Z][a-z]+(?:[-'][A-Za-z]+)?)"
     patt_mixed = re.compile(rf"\b({token}(?:\s+{token}){{1,4}})\b")
     for m in patt_mixed.finditer(text):
-        span_text = m.group(1)
-        if BAD_DATE_CTX.search(span_text) or looks_like_company(span_text):
+        cand = m.group(1)
+        if BAD_CTX.search(cand) or looks_like_company(cand):
             continue
-        return clean_name(span_text)
+        return clean_name(cand)
 
-    # 3) ALL-CAPS fallback (require tokens of **2+ letters**; ignore single-letter tokens)
+    # 3) ALL-CAPS fallback (tokens must be >=2 letters; ignore initials)
     token_caps = r"(?:[A-Z]{2,}(?:[-'][A-Z]{2,})?)"
     patt_caps = re.compile(rf"\b(({token_caps})(?:\s+{token_caps}){{1,4}})\b")
     for m in patt_caps.finditer(text):
-        span_text = m.group(1)
-        if BAD_DATE_CTX.search(span_text) or looks_like_company(span_text):
+        cand = m.group(1)
+        if BAD_CTX.search(cand) or looks_like_company(cand) or has_single_letter_token(cand):
             continue
-        if has_single_letter_token(span_text):
-            continue
-        return clean_name(span_text)
+        return clean_name(cand)
 
     return None
 
-def extract_text_from_pdf(uploaded) -> str:
-    """Extract text via PyMuPDF; fall back to OCR if needed."""
-    uploaded.seek(0)
-    pdf_bytes = uploaded.read()
+# ---------- Text extraction ----------
+def extract_text_from_pdf(pdf_file):
     try:
-        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-            text = "\n".join(page.get_text() for page in doc)
-            if text and text.strip():
-                return text
-    except Exception:
-        pass
-    # Fallback OCR
-    try:
-        images = convert_from_bytes(pdf_bytes)
-        text = "\n".join(pytesseract.image_to_string(img) for img in images)
+        with fitz.open(stream=pdf_file.read(), filetype="pdf") as doc:
+            text = "\n".join([page.get_text() for page in doc])
         return text
     except Exception:
-        return ""
+        pdf_file.seek(0)
+        images = convert_from_bytes(pdf_file.read())
+        text = "\n".join([pytesseract.image_to_string(img) for img in images])
+        return text
 
-def extract_info_from_text(text: str):
-    # --- Name (person) ---
-    name = find_full_name(text)
-    name_slug = name.replace(" ", "_") if name else "Unknown_Name"
+# ---------- Parse info & build names ----------
+def extract_info_from_text(text):
+    # Name (prefer person, not company)
+    name = find_person_name(text)
+    name = name if name else "Unknown Name"
+    name_slug = name.replace(" ", "_")
 
-    # --- Dates ---
+    # Dates
     start_match = re.search(r"Start\s*Date\s*:\s*(\d{2}-[A-Za-z]{3}-\d{4})", text, re.IGNORECASE)
     end_match   = re.search(r"End\s*Date\s*:\s*(\d{2}-[A-Za-z]{3}-\d{4})",   text, re.IGNORECASE)
     start_date = start_match.group(1) if start_match else "UnknownStart"
     end_date   = end_match.group(1)   if end_match   else "UnknownEnd"
 
+    # Labels
     try:
         start_dt = datetime.strptime(start_date, "%d-%b-%Y")
-        end_dt   = datetime.strptime(end_date,   "%d-%b-%Y")
+        end_dt = datetime.strptime(end_date, "%d-%b-%Y")
         file_label = f"{name_slug}_{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.pdf"
-        zip_label  = f"{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
+        zip_label = f"{start_dt.strftime('%Y.%m.%d')}-{end_dt.strftime('%m.%d')}.zip"
     except Exception:
         file_label = f"{name_slug}_UnknownDate.pdf"
-        zip_label  = "UnknownDate.zip"
+        zip_label = "UnknownDate.zip"
 
     return file_label, zip_label
 
-# ---------------- App Logic ----------------
+# ---------- App ----------
 uploaded_files = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
 
 renamed_files = []
@@ -149,8 +136,6 @@ if uploaded_files:
         try:
             text = extract_text_from_pdf(uploaded_file)
             new_name, zip_filename = extract_info_from_text(text)
-
-            # Re-read bytes for download
             uploaded_file.seek(0)
             file_bytes = uploaded_file.read()
             renamed_files.append((new_name, file_bytes))
