@@ -210,7 +210,7 @@ def extract_overall_fields(pdf_bytes):
 st.markdown("<div class='section-header'>🔧 Mode</div>", unsafe_allow_html=True)
 mode = st.radio(
     "Choose how you want to process files:",
-    ["Individual PDFs", "Merged PDFs"],
+    ["Individual PDF", "Merged PDFs"],
     index=0,
     help=(
         "Select *Individual PDFs* if your file contains multiple records that need to be split and renamed individually. "
@@ -220,10 +220,10 @@ mode = st.radio(
 
 # ---------------------- UPLOAD SECTION ----------------------
 st.markdown("<div class='section-header'>📂 Upload Your PDF Files</div>", unsafe_allow_html=True)
-if mode == "Individual PDFs":
+if mode == "Individual PDF":
     st.markdown(
-        "<div class='info-card'>Upload a PDF that contains multiple records. "
-        "Output: <i>\"StartDate-EndDate_Code_Name_OrderNo.pdf\"</i>.</div>",
+        "<div class='info-card'>Upload merged PDF"
+        "Output: <i>\"StartDate-EndDate_Code_Name_OrderNo\"</i>.</div>",
         unsafe_allow_html=True,
     )
 else:
