@@ -37,7 +37,7 @@ st.markdown(
 )
 
 # ---------------------- HEADER ----------------------
-st.markdown("<div class='main-title'>📄 PDF Rename Tool</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-title'>📄 AutoName AI</div>", unsafe_allow_html=True)
 st.markdown(
     "<div class='subtitle'>Automatically rename PDF(s) using detected <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>",
     unsafe_allow_html=True,
