@@ -155,4 +155,153 @@ def parse_date(date_str: str, style: str) -> datetime | None:
             continue
     return None
 
-def build_filenames(name: str, s_dt: datetime | None, e_dt: datetime | None, style: str,_)
+def build_filenames(name: str, s_dt: datetime | None, e_dt: datetime | None, style: str, order: str | None) -> tuple[str, str]:
+    name_slug = safe_slug(name)
+    order_slug = safe_slug(order) if order else None
+
+    if s_dt and e_dt:
+        ymd_dot = s_dt.strftime('%Y.%m.%d')
+        md_dot  = e_dt.strftime('%m.%d')
+        ymd_comp = s_dt.strftime('%Y%m%d')
+        md_comp  = e_dt.strftime('%m%d')
+
+        if style.startswith("{Order}_{Name}_{YYYY.MM.DD}-{MM.DD}"):
+            base = f"{name_slug}_{ymd_dot}-{md_dot}.pdf"
+            pdf_name = f"{order_slug}_{base}" if order_slug else base
+            zip_name = f"{ymd_dot}-{md_dot}.zip"
+        elif style.startswith("{Order}_{YYYY.MM.DD}-{MM.DD}_{Name}"):
+            base = f"{ymd_dot}-{md_dot}_{name_slug}.pdf"
+            pdf_name = f"{order_slug}_{base}" if order_slug else base
+            zip_name = f"{ymd_dot}-{md_dot}.zip"
+        elif style.startswith("{Name}_{YYYY.MM.DD}-{MM.DD}"):
+            pdf_name = f"{name_slug}_{ymd_dot}-{md_dot}.pdf"
+            zip_name = f"{ymd_dot}-{md_dot}.zip"
+        else:
+            pdf_name = f"{name_slug}_{ymd_comp}-{md_comp}.pdf"
+            zip_name = f"{ymd_comp}-{md_comp}.zip"
+    else:
+        prefix = f"{order_slug}_" if order_slug else ""
+        pdf_name = f"{prefix}{name_slug}_UnknownDate.pdf"
+        zip_name = "UnknownDate.zip"
+
+    return pdf_name, zip_name
+
+def find_date_strings(text: str) -> tuple[str, str]:
+    sm = re.search(START_REGEX, text, re.IGNORECASE)
+    em = re.search(END_REGEX, text, re.IGNORECASE)
+    return (sm.group(1) if sm else ""), (em.group(1) if em else "")
+
+def split_pdf(pdf_bytes: bytes) -> list[dict]:
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        texts = extract_text_pages(pdf_bytes, allow_ocr=use_ocr)
+        boundaries = [i for i, t in enumerate(texts) if re.search(SPLIT_ANCHOR, t, re.IGNORECASE)]
+        if not boundaries:
+            return [{"from": 0, "to": len(doc) - 1, "text": "\n".join(texts)}]
+        boundaries.append(len(doc))
+        parts = []
+        for i in range(len(boundaries) - 1):
+            start = boundaries[i]
+            end = boundaries[i + 1] - 1
+            parts.append({"from": start, "to": end, "text": "\n".join(texts[start:end + 1])})
+        return parts
+
+def export_pages(pdf_bytes: bytes, from_page: int, to_page: int) -> bytes:
+    src = fitz.open(stream=pdf_bytes, filetype="pdf")
+    new_pdf = fitz.open()
+    new_pdf.insert_pdf(src, from_page=from_page, to_page=to_page)
+    buf = BytesIO()
+    new_pdf.save(buf)
+    new_pdf.close()
+    src.close()
+    buf.seek(0)
+    return buf.read()
+
+# ---------------------- Uploader ----------------------
+st.subheader("Upload")
+st.caption("Files you upload stay local to your session.")
+uploaded_files = st.file_uploader("Drag & drop PDF(s) here or browse", type="pdf", accept_multiple_files=True)
+
+# ---------------------- App Logic ----------------------
+if uploaded_files:
+    total_files = len(uploaded_files)
+    st.markdown(f"**{total_files}** file{'s' if total_files>1 else ''} queued.")
+    st.write("")
+
+    for uploaded in uploaded_files:
+        st.markdown(f"### {uploaded.name}")
+        with st.container():
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.write("Processing…")
+
+            uploaded.seek(0)
+            pdf_bytes = uploaded.read()
+            parts = split_pdf(pdf_bytes)
+
+            # Single part → rename
+            if len(parts) == 1:
+                text = parts[0]["text"]
+
+                name = guess_name_from_text(text)
+                order = extract_order_number(text)
+                start_s, end_s = find_date_strings(text)
+                s_dt = parse_date(start_s, date_input_style)
+                e_dt = parse_date(end_s, date_input_style)
+
+                filename, _zipname = build_filenames(name, s_dt, e_dt, filename_style, order)
+
+                # KPIs
+                kpi = st.columns(5)
+                with kpi[0]: st.metric("Pages", "Single")
+                with kpi[1]: st.metric("Order", order or "—")
+                with kpi[2]: st.metric("Name", name if name != "Unknown Name" else "—")
+                with kpi[3]: st.metric("Start Date", start_s or "—")
+                with kpi[4]: st.metric("End Date", end_s or "—")
+
+                st.success(f"Renamed to:  \n<span class='filename'>{filename}</span>", icon="✅", unsafe_allow_html=True)
+                st.download_button(
+                    label="🔽 Download Renamed PDF",
+                    data=pdf_bytes,
+                    file_name=filename,
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+            # Multiple parts → ZIP
+            else:
+                st.info(f"Detected **{len(parts)}** parts (by 'Start Date').", icon="🪄")
+                zip_buffer = BytesIO()
+
+                with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+                    for idx, part in enumerate(parts, 1):
+                        text = part["text"]
+
+                        name = guess_name_from_text(text)
+                        order = extract_order_number(text)
+                        start_s, end_s = find_date_strings(text)
+                        s_dt = parse_date(start_s, date_input_style)
+                        e_dt = parse_date(end_s, date_input_style)
+                        filename, zipname = build_filenames(name, s_dt, e_dt, filename_style, order)
+
+                        part_bytes = export_pages(pdf_bytes, part["from"], part["to"])
+                        zipf.writestr(filename, part_bytes)
+
+                        st.markdown(
+                            f"- Part **{idx}**: pages **{part['from']+1}–{part['to']+1}** → "
+                            f"<span class='filename'>{filename}</span>",
+                            unsafe_allow_html=True
+                        )
+
+                zip_buffer.seek(0)
+                st.download_button(
+                    label="📦 Download All as ZIP",
+                    data=zip_buffer,
+                    file_name="renamed_parts.zip",
+                    mime="application/zip",
+                    use_container_width=True
+                )
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+else:
+    st.info(
+        "Upload one or more PDFs to begin. We’ll e
