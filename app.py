@@ -16,7 +16,7 @@ except Exception:
 
 
 # ---------------------- PAGE SETUP ----------------------
-st.set_page_config(page_title="PDF Rename Tool", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Auto Name AI", page_icon="📄", layout="wide")
 
 # --- Minimal CSS polish ---
 st.markdown(
@@ -38,7 +38,7 @@ st.markdown(
 )
 
 # ---------------------- HEADER ----------------------
-st.markdown("<div class='main-title'>📄 PDF Rename Tool</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-title'>📄 Auto Name AI</div>", unsafe_allow_html=True)
 st.markdown(
     "<div class='subtitle'>Rename using detected <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>",
     unsafe_allow_html=True,
@@ -213,8 +213,8 @@ mode = st.radio(
     ["Individual PDF", "Merged PDFs"],
     index=0,
     help=(
-        "Select *Individual PDFs* if your file contains multiple records that need to be split and renamed individually. "
-        "Choose *Merged PDFs* if each PDF should stay whole and simply be renamed once."
+        "Select *Individual PDF*split pdf and renamed individually. "
+        "Choose *Merged PDFs* Rename merged pdf"
     ),
 )
 
