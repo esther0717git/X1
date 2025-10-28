@@ -64,6 +64,7 @@ def safe_slug(s: str | None) -> str:
     s = re.sub(r"\s+", "_", s.strip())
     return s or "Unknown"
 
+
 def extract_text_pages(pdf_bytes: bytes) -> list[str]:
     """Extract text per page; fallback to OCR if needed."""
     try:
@@ -84,20 +85,22 @@ def extract_text_pages(pdf_bytes: bytes) -> list[str]:
             pass
     return [""]
 
+
 def extract_order_number(text: str) -> str | None:
     for pat in ORDER_PATTERNS:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
             val = re.sub(r"[^A-Za-z0-9\-]", "", m.group(1))
-            # avoid capturing dates like 2024-10-05
-            if not re.match(r"\d{4}-\d{2}-\d{2}", val):
+            if not re.match(r"\d{4}-\d{2}-\d{2}", val):  # avoid capturing dates
                 return val
     return None
+
 
 def find_date_strings(text: str) -> tuple[str, str]:
     sm = re.search(START_REGEX, text, re.IGNORECASE)
     em = re.search(END_REGEX, text, re.IGNORECASE)
     return (sm.group(1) if sm else ""), (em.group(1) if em else "")
+
 
 def parse_date(s: str) -> datetime | None:
     s = (s or "").strip()
@@ -108,10 +111,11 @@ def parse_date(s: str) -> datetime | None:
             continue
     return None
 
+
 def guess_name_from_text(text: str) -> str:
-    # Simple 2–4 capitalized words heuristic
     m = re.search(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})\b", text)
     return m.group(1) if m else "Unknown_Name"
+
 
 def extract_candidate_codes_before_order(text: str) -> list[str]:
     """Return all code-like tokens (AA9..AA999) that appear BEFORE the 'Order' line."""
@@ -125,6 +129,7 @@ def extract_candidate_codes_before_order(text: str) -> list[str]:
                 candidates.append(tok)
     return candidates
 
+
 def extract_site_code(text: str) -> str | None:
     """Pick the most plausible code before 'Order' (closest to it). Fallback to any strict match."""
     cands = extract_candidate_codes_before_order(text)
@@ -134,6 +139,7 @@ def extract_site_code(text: str) -> str | None:
         if CODE_STRICT.match(tok):
             return tok
     return None
+
 
 def export_pages(pdf_bytes, from_page, to_page):
     src = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -145,6 +151,7 @@ def export_pages(pdf_bytes, from_page, to_page):
     src.close()
     buf.seek(0)
     return buf.read()
+
 
 # ---------- filename builders ----------
 def fname_dates_code_name_order(s_dt, e_dt, code, name, order) -> str:
@@ -162,8 +169,9 @@ def fname_dates_code_name_order(s_dt, e_dt, code, name, order) -> str:
         parts.append(safe_slug(order))
     return "_".join(parts) + ".pdf"
 
+
 def fname_dates_code_order(s_dt, e_dt, code, order) -> str:
-    """No-split mode: StartDate-EndDate_Code_OrderNo."""
+    """No-split mode: StartDate-EndDate_Code_OrderNo.pdf."""
     parts = []
     if s_dt and e_dt:
         parts.append(f"{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}")
@@ -173,7 +181,8 @@ def fname_dates_code_order(s_dt, e_dt, code, order) -> str:
         parts.append(safe_slug(code))
     if order:
         parts.append(safe_slug(order))
-    return "_".join(parts)
+    return "_".join(parts) + ".pdf"
+
 
 # ---------- split logic ----------
 def split_pdf(pdf_bytes):
@@ -184,6 +193,7 @@ def split_pdf(pdf_bytes):
             return [{"from": 0, "to": len(doc) - 1, "text": "\n".join(texts)}]
         marks.append(len(doc))
         return [{"from": marks[i], "to": marks[i+1]-1, "text": "\n".join(texts[marks[i]:marks[i+1]])} for i in range(len(marks)-1)]
+
 
 # ---------- no-split extract ----------
 def extract_overall_fields(pdf_bytes):
@@ -218,12 +228,13 @@ if mode == "Individual PDFs":
     )
 else:
     st.markdown(
-        "<div class='info-card'>Upload single or merged PDFs. "
-        "Output: <i>\"StartDate-EndDate_Code_OrderNo\"</i>.</div>",
+        "<div class='info-card'><b>Merged PDF</b><br>"
+        "Upload merged PDF | Output: <i>StartDate-EndDate_Code_OrderNo.pdf</i></div>",
         unsafe_allow_html=True,
     )
 
 uploaded = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
+
 
 # ---------------------- MAIN LOGIC ----------------------
 if uploaded:
