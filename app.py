@@ -40,7 +40,7 @@ st.markdown(
 # ---------------------- HEADER ----------------------
 st.markdown("<div class='main-title'>📄 PDF Rename Tool</div>", unsafe_allow_html=True)
 st.markdown(
-    "<div class='subtitle'>Rename using detected <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, <b>Order No</b>, and site code (e.g., <i>DA11</i>, <i>SG5</i>).</div>",
+    "<div class='subtitle'>Rename using detected <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>",
     unsafe_allow_html=True,
 )
 
@@ -163,7 +163,7 @@ def fname_dates_code_name_order(s_dt, e_dt, code, name, order) -> str:
     return "_".join(parts) + ".pdf"
 
 def fname_dates_code_order(s_dt, e_dt, code, order) -> str:
-    """No-split mode: StartDate-EndDate_Code_OrderNo.pdf."""
+    """No-split mode: StartDate-EndDate_Code_OrderNo."""
     parts = []
     if s_dt and e_dt:
         parts.append(f"{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}")
@@ -173,7 +173,7 @@ def fname_dates_code_order(s_dt, e_dt, code, order) -> str:
         parts.append(safe_slug(code))
     if order:
         parts.append(safe_slug(order))
-    return "_".join(parts) + ".pdf"
+    return "_".join(parts)
 
 # ---------- split logic ----------
 def split_pdf(pdf_bytes):
@@ -213,14 +213,13 @@ st.markdown("<div class='section-header'>📂 Upload Your PDF Files</div>", unsa
 if mode == "Individual PDFs":
     st.markdown(
         "<div class='info-card'>Upload a PDF that contains multiple records. "
-        "The app will split on <b>Start Date</b> and rename each part as "
-        "<i>StartDate-EndDate_Code_Name_OrderNo.pdf</i>.</div>",
+        "Output: <i>\"StartDate-EndDate_Code_Name_OrderNo.pdf\"</i>.</div>",
         unsafe_allow_html=True,
     )
 else:
     st.markdown(
         "<div class='info-card'>Upload single or merged PDFs. "
-        "The app will rename each PDF as <i>StartDate-EndDate_Code_OrderNo.pdf</i> (no splitting).</div>",
+        "Output: <i>\"StartDate-EndDate_Code_OrderNo\"</i>.</div>",
         unsafe_allow_html=True,
     )
 
