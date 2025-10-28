@@ -39,7 +39,7 @@ st.markdown(
 # ---------------------- HEADER ----------------------
 st.markdown("<div class='main-title'>📄 PDF Rename Tool</div>", unsafe_allow_html=True)
 st.markdown(
-    "<div class='subtitle'>Automatically rename PDF(s) using detected <b>Order No</b>, <b>Name</b>, <b>Start Date</b>, and <b>End Date</b>.</div>",
+    "<div class='subtitle'>Automatically rename PDF(s) using detected <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>",
     unsafe_allow_html=True,
 )
 
@@ -115,13 +115,13 @@ def parse_date(s: str) -> datetime | None:
     return None
 
 
-def build_filename(order, name, s_dt, e_dt) -> str:
+def build_filename(s_dt, e_dt, name, order) -> str:
     name_slug = safe_slug(name)
     order_slug = safe_slug(order) if order else None
     if s_dt and e_dt:
-        fname = f"{order_slug+'_' if order_slug else ''}{name_slug}_{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}.pdf"
+        fname = f"{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}_{name_slug}{'_' + order_slug if order_slug else ''}.pdf"
     else:
-        fname = f"{order_slug+'_' if order_slug else ''}{name_slug}_UnknownDate.pdf"
+        fname = f"UnknownDate_{name_slug}{'_' + order_slug if order_slug else ''}.pdf"
     return fname
 
 
@@ -149,7 +149,7 @@ def export_pages(pdf_bytes, from_page, to_page):
 
 # ---------------------- UPLOAD SECTION ----------------------
 st.markdown("<div class='section-header'>📂 Upload Your PDF Files</div>", unsafe_allow_html=True)
-st.markdown("<div class='info-card'>Upload single or merged PDFs. The app will extract info and rename automatically based on detected fields.</div>", unsafe_allow_html=True)
+st.markdown("<div class='info-card'>Upload single or merged PDFs. The app will extract information and rename automatically based on detected <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>", unsafe_allow_html=True)
 
 uploaded = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
 
@@ -162,11 +162,11 @@ if uploaded:
 
         if len(parts) == 1:
             text = parts[0]["text"]
+            s_str, e_str = find_date_strings(text)
             name = guess_name_from_text(text)
             order = extract_order_number(text)
-            s_str, e_str = find_date_strings(text)
             s_dt, e_dt = parse_date(s_str), parse_date(e_str)
-            filename = build_filename(order, name, s_dt, e_dt)
+            filename = build_filename(s_dt, e_dt, name, order)
 
             st.success("✅ Renamed to:")
             st.code(filename)
@@ -178,11 +178,11 @@ if uploaded:
             with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                 for i, p in enumerate(parts, 1):
                     text = p["text"]
+                    s_str, e_str = find_date_strings(text)
                     name = guess_name_from_text(text)
                     order = extract_order_number(text)
-                    s_str, e_str = find_date_strings(text)
                     s_dt, e_dt = parse_date(s_str), parse_date(e_str)
-                    fname = build_filename(order, name, s_dt, e_dt)
+                    fname = build_filename(s_dt, e_dt, name, order)
                     zf.writestr(fname, export_pages(pdf_bytes, p["from"], p["to"]))
                     st.write(f"📄 Part {i}: pages {p['from']+1}-{p['to']+1} → **{fname}**")
 
