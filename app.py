@@ -224,7 +224,7 @@ if mode == "Individual PDF":
     st.markdown(
         "<div class='info-card'>Upload merged PDF"<br>
         Output: <i>\"StartDate-EndDate_Code_Name_OrderNo\"</i>.</div>,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True,)
     )
 else:
     st.markdown(
