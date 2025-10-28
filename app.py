@@ -41,7 +41,7 @@ st.markdown(
     """
     <div class="hero">
       <h1 style="margin-bottom:0.25rem;">📄 PDF Rename</h1>
-      <p class="muted">Automatically rename PDF(s) using the <b>name, order number, start date, and end date</b> found inside.  
+      <p class="muted">Automatically rename PDF(s) using the <b>name, order number, start date, and end date</b> found inside.
       If a file contains multiple <i>Start Date</i> sections, we’ll split it and name each part for you.</p>
     </div>
     """,
@@ -84,7 +84,7 @@ with st.sidebar:
 
 # ---------------------- Helpers ----------------------
 START_REGEX = r"Start\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4}|[0-9]{2}/[0-9]{2}/[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"
-END_REGEX   = r"End\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4}|[0-9]{2}/[0-9]{2}/[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"
+END_REGEX = r"End\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4}|[0-9]{2}/[0-9]{2}/[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"
 SPLIT_ANCHOR = r"Start\s*Date"
 
 ORDER_PATTERNS = [
@@ -93,12 +93,14 @@ ORDER_PATTERNS = [
     r"\bSO\s*[:\-]?\s*([A-Z0-9\-]{5,})",
 ]
 
-def safe_slug(s: str) -> str:
+def safe_slug(s: str | None) -> str:
+    s = s or ""
     s = re.sub(r"[^\w\s\-\.]+", "", s, flags=re.UNICODE)
     s = re.sub(r"\s+", "_", s.strip())
     return s or "Unknown"
 
 def extract_text_pages(pdf_bytes: bytes, allow_ocr: bool) -> list[str]:
+    # Try native text extraction first
     try:
         page_texts = []
         with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -109,6 +111,7 @@ def extract_text_pages(pdf_bytes: bytes, allow_ocr: bool) -> list[str]:
     except Exception:
         pass
 
+    # OCR fallback
     if allow_ocr and OCR_AVAILABLE:
         try:
             images = convert_from_bytes(pdf_bytes)
@@ -116,6 +119,7 @@ def extract_text_pages(pdf_bytes: bytes, allow_ocr: bool) -> list[str]:
         except Exception:
             pass
 
+    # Final fallback
     return [""]
 
 def guess_name_from_text(text: str) -> str:
@@ -127,9 +131,8 @@ def extract_order_number(text: str) -> str | None:
     for pat in ORDER_PATTERNS:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
-            # sanitize to keep typical PO formats (alnum + dash)
             order = re.sub(r"[^A-Za-z0-9\-]", "", m.group(1))
-            # avoid accidentally capturing dates like 2024-10-05
+            # Avoid capturing dates like 2024-10-05 as an order number
             if not re.match(r"\d{4}-\d{2}-\d{2}", order):
                 return order
     return None
@@ -160,10 +163,10 @@ def build_filenames(name: str, s_dt: datetime | None, e_dt: datetime | None, sty
     order_slug = safe_slug(order) if order else None
 
     if s_dt and e_dt:
-        ymd_dot = s_dt.strftime('%Y.%m.%d')
-        md_dot  = e_dt.strftime('%m.%d')
-        ymd_comp = s_dt.strftime('%Y%m%d')
-        md_comp  = e_dt.strftime('%m%d')
+        ymd_dot = s_dt.strftime("%Y.%m.%d")
+        md_dot = e_dt.strftime("%m.%d")
+        ymd_comp = s_dt.strftime("%Y%m%d")
+        md_comp = e_dt.strftime("%m%d")
 
         if style.startswith("{Order}_{Name}_{YYYY.MM.DD}-{MM.DD}"):
             base = f"{name_slug}_{ymd_dot}-{md_dot}.pdf"
@@ -224,14 +227,14 @@ uploaded_files = st.file_uploader("Drag & drop PDF(s) here or browse", type="pdf
 # ---------------------- App Logic ----------------------
 if uploaded_files:
     total_files = len(uploaded_files)
-    st.markdown(f"**{total_files}** file{'s' if total_files>1 else ''} queued.")
+    st.markdown(f"**{total_files}** file{'s' if total_files > 1 else ''} queued.")
     st.write("")
 
     for uploaded in uploaded_files:
         st.markdown(f"### {uploaded.name}")
         with st.container():
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.write("Processing…")
+            st.write("Processing...")
 
             uploaded.seek(0)
             pdf_bytes = uploaded.read()
@@ -251,13 +254,18 @@ if uploaded_files:
 
                 # KPIs
                 kpi = st.columns(5)
-                with kpi[0]: st.metric("Pages", "Single")
-                with kpi[1]: st.metric("Order", order or "—")
-                with kpi[2]: st.metric("Name", name if name != "Unknown Name" else "—")
-                with kpi[3]: st.metric("Start Date", start_s or "—")
-                with kpi[4]: st.metric("End Date", end_s or "—")
+                with kpi[0]:
+                    st.metric("Pages", "Single")
+                with kpi[1]:
+                    st.metric("Order", order or "—")
+                with kpi[2]:
+                    st.metric("Name", name if name != "Unknown Name" else "—")
+                with kpi[3]:
+                    st.metric("Start Date", start_s or "—")
+                with kpi[4]:
+                    st.metric("End Date", end_s or "—")
 
-                st.success(f"Renamed to:  \n<span class='filename'>{filename}</span>", icon="✅", unsafe_allow_html=True)
+                st.success(f"Renamed to:\n<span class='filename'>{filename}</span>", icon="✅", unsafe_allow_html=True)
                 st.download_button(
                     label="🔽 Download Renamed PDF",
                     data=pdf_bytes,
@@ -268,7 +276,7 @@ if uploaded_files:
 
             # Multiple parts → ZIP
             else:
-                st.info(f"Detected **{len(parts)}** parts (by 'Start Date').", icon="🪄")
+                st.info("Detected multiple parts (by 'Start Date').", icon="🪄")
                 zip_buffer = BytesIO()
 
                 with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
@@ -286,7 +294,7 @@ if uploaded_files:
                         zipf.writestr(filename, part_bytes)
 
                         st.markdown(
-                            f"- Part **{idx}**: pages **{part['from']+1}–{part['to']+1}** → "
+                            f"- Part **{idx}**: pages **{part['from'] + 1}–{part['to'] + 1}** → "
                             f"<span class='filename'>{filename}</span>",
                             unsafe_allow_html=True
                         )
@@ -300,8 +308,12 @@ if uploaded_files:
                     use_container_width=True
                 )
 
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
 else:
     st.info(
-        "Upload one or more PDFs to begin. We’ll e
+        "Upload one or more PDFs to begin. We'll extract text, find **Order #**, **Name**, **Start Date**, and **End Date**, "
+        "then rename the file(s). If a PDF includes multiple **Start Date** sections, each section becomes a separate file.",
+        icon="💡"
+    )
+    st.caption("Tip: Toggle OCR fallback in the sidebar if your PDFs are scans.")
