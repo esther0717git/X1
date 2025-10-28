@@ -222,8 +222,8 @@ mode = st.radio(
 st.markdown("<div class='section-header'>📂 Upload Your PDF Files</div>", unsafe_allow_html=True)
 if mode == "Individual PDF":
     st.markdown(
-        "<div class='info-card'>Upload merged PDF"
-        "Output: <i>\"StartDate-EndDate_Code_Name_OrderNo\"</i>.</div>",
+        "<div class='info-card'>Upload merged PDF"<br>
+        Output: <i>\"StartDate-EndDate_Code_Name_OrderNo\"</i>.</div>,
         unsafe_allow_html=True,
     )
 else:
