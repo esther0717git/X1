@@ -13,7 +13,6 @@ try:
 except Exception:
     OCR_AVAILABLE = False
 
-
 # ---------------------- PAGE SETUP ----------------------
 st.set_page_config(page_title="PDF Rename Tool", page_icon="📄", layout="wide")
 
@@ -58,8 +57,7 @@ ORDER_PATTERNS = [
 ]
 DATE_FORMATS = ["%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d"]
 
-
-# ---------------------- HELPER FUNCTIONS ----------------------
+# ---------------------- HELPERS ----------------------
 def safe_slug(s: str | None) -> str:
     s = s or ""
     s = re.sub(r"[^\w\s\-\.]+", "", s)
@@ -77,7 +75,6 @@ def extract_text_pages(pdf_bytes: bytes) -> list[str]:
             return texts
     except Exception:
         pass
-
     if OCR_AVAILABLE:
         try:
             images = convert_from_bytes(pdf_bytes)
@@ -91,7 +88,6 @@ def extract_order_number(text: str) -> str | None:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
             val = re.sub(r"[^A-Za-z0-9\-]", "", m.group(1))
-            # Avoid mis-reading dates like 2024-10-05 as order numbers
             if not re.match(r"\d{4}-\d{2}-\d{2}", val):
                 return val
     return None
@@ -110,6 +106,32 @@ def parse_date(s: str) -> datetime | None:
             pass
     return None
 
+def guess_name_from_text(text: str) -> str:
+    m = re.search(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})\b", text)
+    return m.group(1) if m else "Unknown_Name"
+
+def extract_third_line_code(text: str) -> str | None:
+    """
+    Try to capture the 3rd meaningful line (e.g., 'SG5', 'DA11') before the Order/Start/End lines.
+    - Primary: 3rd non-empty line if it isn't a Company/Order/Start/End line.
+    - Fallback: first standalone all-caps/alnum token (2-8 chars) that appears before 'Order'/'Start'/'End'.
+    """
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    # Primary: third non-empty line
+    if len(lines) >= 3:
+        cand = lines[2]
+        if not re.search(r'^(Company|Order|Start|End)\b', cand, re.I):
+            tok = re.search(r'\b([A-Z0-9\-]{2,8})\b$', cand)
+            if tok:
+                return tok.group(1)
+    # Fallback: scan lines until Order/Start/End appears
+    for ln in lines:
+        if re.search(r'^(Order|Start|End)\b', ln, re.I):
+            break
+        if re.fullmatch(r'[A-Z0-9\-]{2,8}', ln):
+            return ln
+    return None
+
 def export_pages(pdf_bytes, from_page, to_page):
     src = fitz.open(stream=pdf_bytes, filetype="pdf")
     new = fitz.open()
@@ -122,25 +144,38 @@ def export_pages(pdf_bytes, from_page, to_page):
     return buf.read()
 
 # ---------- filename builders ----------
-def build_filename_dates_order(s_dt, e_dt, order) -> str:
-    """Filename: StartDate-EndDate_OrderNo.pdf (Name omitted)."""
-    order_slug = safe_slug(order) if order else None
+def fname_dates_code_name_order(s_dt, e_dt, code, name, order) -> str:
+    """
+    Smart Split filename: StartDate-EndDate_Code_Name_OrderNo.pdf
+    (omit parts that are missing)
+    """
+    parts = []
     if s_dt and e_dt:
-        base = f"{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}"
-        return f"{base}{'_' + order_slug if order_slug else ''}.pdf"
+        parts.append(f"{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}")
     else:
-        return f"UnknownDate{'_' + order_slug if order_slug else ''}.pdf"
+        parts.append("UnknownDate")
+    if code:
+        parts.append(safe_slug(code))
+    if name:
+        parts.append(safe_slug(name))
+    if order:
+        parts.append(safe_slug(order))
+    return "_".join(parts) + ".pdf"
 
-def build_filename_dates_name_order(s_dt, e_dt, name, order) -> str:
-    """Original mode filename: StartDate-EndDate_Name_OrderNo.pdf"""
-    name_slug = safe_slug(name)
-    order_slug = safe_slug(order) if order else None
+def fname_dates_code_order(s_dt, e_dt, code, order) -> str:
+    """
+    No-split filename: StartDate-EndDate_Code_OrderNo.pdf
+    """
+    parts = []
     if s_dt and e_dt:
-        base = f"{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}_{name_slug}"
-        return f"{base}{'_' + order_slug if order_slug else ''}.pdf"
+        parts.append(f"{s_dt.strftime('%Y.%m.%d')}-{e_dt.strftime('%m.%d')}")
     else:
-        return f"UnknownDate_{name_slug}{'_' + order_slug if order_slug else ''}.pdf"
-
+        parts.append("UnknownDate")
+    if code:
+        parts.append(safe_slug(code))
+    if order:
+        parts.append(safe_slug(order))
+    return "_".join(parts) + ".pdf"
 
 # ---------- split logic for Smart Split mode ----------
 def split_pdf(pdf_bytes):
@@ -152,17 +187,15 @@ def split_pdf(pdf_bytes):
         marks.append(len(doc))
         return [{"from": marks[i], "to": marks[i+1]-1, "text": "\n".join(texts[marks[i]:marks[i+1]])} for i in range(len(marks)-1)]
 
-
-# ---------- no-split extract for Dates+Order mode ----------
-def extract_overall_fields(pdf_bytes) -> tuple[datetime | None, datetime | None, str | None]:
-    """Extract first Start Date, End Date, and Order No across the whole file (no splitting)."""
+# ---------- no-split extract ----------
+def extract_overall_fields(pdf_bytes):
     texts = extract_text_pages(pdf_bytes)
     all_text = "\n".join(texts)
     s_str, e_str = find_date_strings(all_text)
     order = extract_order_number(all_text)
+    code = extract_third_line_code(all_text)
     s_dt, e_dt = parse_date(s_str), parse_date(e_str)
-    return s_dt, e_dt, order
-
+    return s_dt, e_dt, order, code
 
 # ---------------------- MODE PICKER ----------------------
 st.markdown("<div class='section-header'>🔧 Mode</div>", unsafe_allow_html=True)
@@ -171,15 +204,15 @@ mode = st.radio(
     ["Smart Split & Rename", "Dates + Order (No Split)"],
     index=0,
     help="“Smart Split & Rename” breaks merged PDFs into parts at each 'Start Date'. "
-         "“Dates + Order (No Split)” just renames the file using the first detected Start/End Date and Order No."
+         "“Dates + Order (No Split)” just renames the file using the first detected Start/End Date and Order No (now includes the 3rd line code if present)."
 )
 
 # ---------------------- UPLOAD SECTION ----------------------
 st.markdown("<div class='section-header'>📂 Upload Your PDF Files</div>", unsafe_allow_html=True)
 if mode == "Smart Split & Rename":
-    st.markdown("<div class='info-card'>Upload single or merged PDFs. The app will split on <b>Start Date</b> and rename each part as <i>StartDate-EndDate_Name_OrderNo.pdf</i>.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='info-card'>Upload single or merged PDFs. The app will remain/split PDF and rename each PDF as <i>StartDate-EndDate_Code_Name_OrderNo.pdf</i>.</div>", unsafe_allow_html=True)
 else:
-    st.markdown("<div class='info-card'>Upload a PDF (1 page or many). The app will extract the first <b>Start Date</b>, <b>End Date</b>, and <b>Order No</b> and rename the file as <i>StartDate-EndDate_OrderNo.pdf</i>. No splitting.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='info-card'>Upload a PDF (1 page or many). The app will extract the first <b>Start Date</b>, <b>End Date</b>, <b>Order No</b>, and the 3rd-line code (e.g., <i>SG5</i>, <i>DA11</i>) and rename as <i>StartDate-EndDate_Code_OrderNo.pdf</i>. No splitting.</div>", unsafe_allow_html=True)
 
 uploaded = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
 
@@ -193,14 +226,14 @@ if uploaded:
             parts = split_pdf(pdf_bytes)
             if len(parts) == 1:
                 text = parts[0]["text"]
-                # Name is kept for this mode (as before)
-                name_match = re.search(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})\b", text)
-                name = name_match.group(1) if name_match else "Unknown_Name"
-                order = extract_order_number(text)
+                # fields
                 s_str, e_str = find_date_strings(text)
                 s_dt, e_dt = parse_date(s_str), parse_date(e_str)
-                filename = build_filename_dates_name_order(s_dt, e_dt, name, order)
+                name = guess_name_from_text(text)
+                order = extract_order_number(text)
+                code = extract_third_line_code(text)
 
+                filename = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
                 st.success("✅ Renamed to:")
                 st.code(filename)
                 st.download_button("⬇️ Download Renamed PDF", pdf_bytes, file_name=filename, mime="application/pdf")
@@ -211,22 +244,21 @@ if uploaded:
                 with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                     for i, p in enumerate(parts, 1):
                         text = p["text"]
-                        name_match = re.search(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})\b", text)
-                        name = name_match.group(1) if name_match else "Unknown_Name"
-                        order = extract_order_number(text)
                         s_str, e_str = find_date_strings(text)
                         s_dt, e_dt = parse_date(s_str), parse_date(e_str)
-                        fname = build_filename_dates_name_order(s_dt, e_dt, name, order)
+                        name = guess_name_from_text(text)
+                        order = extract_order_number(text)
+                        code = extract_third_line_code(text)
+
+                        fname = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
                         zf.writestr(fname, export_pages(pdf_bytes, p["from"], p["to"]))
                         st.write(f"📄 Part {i}: pages {p['from']+1}-{p['to']+1} → **{fname}**")
-
                 zip_buf.seek(0)
                 st.download_button("📦 Download All as ZIP", zip_buf, file_name="renamed_parts.zip", mime="application/zip")
 
         else:  # Dates + Order (No Split)
-            s_dt, e_dt, order = extract_overall_fields(pdf_bytes)
-            filename = build_filename_dates_order(s_dt, e_dt, order)
-
+            s_dt, e_dt, order, code = extract_overall_fields(pdf_bytes)
+            filename = fname_dates_code_order(s_dt, e_dt, code, order)
             st.success("✅ Renamed to:")
             st.code(filename)
             st.download_button("⬇️ Download Renamed PDF", pdf_bytes, file_name=filename, mime="application/pdf")
