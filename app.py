@@ -155,4 +155,4 @@ def parse_date(date_str: str, style: str) -> datetime | None:
             continue
     return None
 
-def build_filenames(name: str, s_dt: datetime | None, e_dt: datetime | None, style: str,_
+def build_filenames(name: str, s_dt: datetime | None, e_dt: datetime | None, style: str,_)
