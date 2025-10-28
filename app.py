@@ -17,40 +17,19 @@ except Exception:
 # ---------------------- Page Setup ----------------------
 st.set_page_config(page_title="PDF Rename Tool", page_icon="📄", layout="wide")
 
-# --- Custom CSS ---
+# --- Custom CSS (for titles/sections only; not used inside st.success/info) ---
 st.markdown(
     """
     <style>
-      .main-title {
-          text-align:center;
-          font-size:2.2rem !important;
-          font-weight:700;
-          margin-bottom:0.5rem;
-      }
-      .subtitle {
-          text-align:center;
-          color: #6c757d;
-          margin-bottom:1.5rem;
-      }
-      .section-header {
-          font-size:1.3rem;
-          font-weight:600;
-          margin-top:1.8rem;
-          margin-bottom:0.3rem;
-          color:#2e7dba;
-      }
+      .main-title { text-align:center; font-size:2.2rem !important; font-weight:700; margin-bottom:0.5rem; }
+      .subtitle   { text-align:center; color:#6c757d; margin-bottom:1.5rem; }
+      .section-header { font-size:1.3rem; font-weight:600; margin-top:1.8rem; margin-bottom:0.3rem; color:#2e7dba; }
       .info-card {
           border:1px solid rgba(0,0,0,0.08);
           background-color:#f8f9fa;
           border-radius:12px;
           padding:1rem 1.5rem;
           margin-bottom:1.2rem;
-      }
-      .filename {
-          font-family:ui-monospace, monospace;
-          background:rgba(0,0,0,0.04);
-          padding:0.1rem 0.4rem;
-          border-radius:4px;
       }
     </style>
     """,
@@ -73,7 +52,12 @@ with st.sidebar:
 
     date_input_style = st.selectbox(
         "Expected date format",
-        ["DD-MMM-YYYY  (e.g., 05-Oct-2025)", "DD/MM/YYYY  (e.g., 05/10/2025)", "YYYY-MM-DD  (e.g., 2025-10-05)", "Auto (try all)"],
+        [
+            "DD-MMM-YYYY  (e.g., 05-Oct-2025)",
+            "DD/MM/YYYY  (e.g., 05/10/2025)",
+            "YYYY-MM-DD  (e.g., 2025-10-05)",
+            "Auto (try all)",
+        ],
         index=0,
     )
 
@@ -91,13 +75,14 @@ with st.sidebar:
 
 # ---------------------- Regex Patterns ----------------------
 START_REGEX = r"Start\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4}|[0-9]{2}/[0-9]{2}/[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"
-END_REGEX = r"End\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4}|[0-9]{2}/[0-9]{2}/[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"
+END_REGEX   = r"End\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4}|[0-9]{2}/[0-9]{2}/[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"
 SPLIT_ANCHOR = r"Start\s*Date"
 ORDER_PATTERNS = [
     r"Order\s*(?:No\.?|Number|#|ID)\s*[:\-]?\s*([A-Z0-9\-]{5,})",
     r"\bPO\s*[:\-]?\s*([A-Z0-9\-]{5,})",
     r"\bSO\s*[:\-]?\s*([A-Z0-9\-]{5,})",
 ]
+
 
 # ---------------------- Helpers ----------------------
 def safe_slug(s: str | None) -> str:
@@ -107,6 +92,7 @@ def safe_slug(s: str | None) -> str:
     return s or "Unknown"
 
 def extract_text_pages(pdf_bytes: bytes, allow_ocr: bool) -> list[str]:
+    # Try native text extraction first
     try:
         texts = []
         with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -117,6 +103,7 @@ def extract_text_pages(pdf_bytes: bytes, allow_ocr: bool) -> list[str]:
     except Exception:
         pass
 
+    # OCR fallback
     if allow_ocr and OCR_AVAILABLE:
         try:
             images = convert_from_bytes(pdf_bytes)
@@ -130,21 +117,23 @@ def extract_order_number(text: str) -> str | None:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
             val = re.sub(r"[^A-Za-z0-9\-]", "", m.group(1))
+            # Avoid mis-reading dates like 2024-10-05 as order numbers
             if not re.match(r"\d{4}-\d{2}-\d{2}", val):
                 return val
     return None
 
 def guess_name_from_text(text: str) -> str:
+    # Simple 2–4 capitalized words heuristic
     m = re.search(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})\b", text)
     return m.group(1) if m else "Unknown Name"
 
-def find_date_strings(text: str):
+def find_date_strings(text: str) -> tuple[str, str]:
     sm = re.search(START_REGEX, text, re.IGNORECASE)
     em = re.search(END_REGEX, text, re.IGNORECASE)
     return (sm.group(1) if sm else ""), (em.group(1) if em else "")
 
 def parse_date(s: str, style: str):
-    s = s.strip()
+    s = (s or "").strip()
     if not s:
         return None
     fmts = {
@@ -153,10 +142,11 @@ def parse_date(s: str, style: str):
         "YYYY-MM-DD": ["%Y-%m-%d"],
         "Auto": ["%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d"],
     }
-    for fmt in fmts.get("Auto" if "Auto" in style else style.split()[0], []):
+    key = "Auto" if "Auto" in style else style.split()[0]
+    for fmt in fmts.get(key, []):
         try:
             return datetime.strptime(s, fmt)
-        except:
+        except Exception:
             pass
     return None
 
@@ -186,7 +176,7 @@ def split_pdf(pdf_bytes):
         texts = extract_text_pages(pdf_bytes, allow_ocr=use_ocr)
         marks = [i for i, t in enumerate(texts) if re.search(SPLIT_ANCHOR, t, re.IGNORECASE)]
         if not marks:
-            return [{"from": 0, "to": len(doc)-1, "text": "\n".join(texts)}]
+            return [{"from": 0, "to": len(doc) - 1, "text": "\n".join(texts)}]
         marks.append(len(doc))
         return [{"from": marks[i], "to": marks[i+1]-1, "text": "\n".join(texts[marks[i]:marks[i+1]])} for i in range(len(marks)-1)]
 
@@ -216,6 +206,7 @@ if uploaded:
             pdf_bytes = file.read()
             parts = split_pdf(pdf_bytes)
 
+            # Single-part: rename directly
             if len(parts) == 1:
                 text = parts[0]["text"]
                 name = guess_name_from_text(text)
@@ -224,8 +215,12 @@ if uploaded:
                 s_dt, e_dt = parse_date(s_str, date_input_style), parse_date(e_str, date_input_style)
                 filename = build_filename(name, s_dt, e_dt, filename_style, order)
 
-                st.success(f"✅ Renamed to: <span class='filename'>{filename}</span>", unsafe_allow_html=True)
+                st.success("✅ Renamed to:")
+                st.code(filename)
+
                 st.download_button("⬇️ Download Renamed PDF", pdf_bytes, file_name=filename, mime="application/pdf")
+
+            # Multi-part: split and zip
             else:
                 st.info(f"Detected {len(parts)} sections by 'Start Date'. Splitting...")
                 zip_buf = BytesIO()
@@ -238,7 +233,7 @@ if uploaded:
                         s_dt, e_dt = parse_date(s_str, date_input_style), parse_date(e_str, date_input_style)
                         fname = build_filename(name, s_dt, e_dt, filename_style, order)
                         zf.writestr(fname, export_pages(pdf_bytes, p["from"], p["to"]))
-                        st.write(f"📄 Part {i}: {p['from']+1}-{p['to']+1} → **{fname}**")
+                        st.write(f"📄 Part {i}: pages {p['from']+1}-{p['to']+1} → **{fname}**")
 
                 zip_buf.seek(0)
                 st.download_button("📦 Download All as ZIP", zip_buf, file_name="renamed_parts.zip", mime="application/zip")
