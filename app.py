@@ -15,7 +15,7 @@ except Exception:
 
 
 # ---------------------- PAGE SETUP ----------------------
-st.set_page_config(page_title="PDF Rename Tool", page_icon="📄", layout="wide")
+st.set_page_config(page_title="AutoName AI", page_icon="📄", layout="wide")
 
 # --- Custom CSS for a polished UI ---
 st.markdown(
