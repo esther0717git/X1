@@ -40,7 +40,7 @@ st.markdown(
 # ---------------------- HEADER ----------------------
 st.markdown("<div class='main-title'> 🚀 FileSmith AI</div>", unsafe_allow_html=True)
 st.markdown(
-    "<div class='subtitle'> Meet Mr. FileSmith — the gentleman who decrypts filenames and performs bulk renaming in the blink of an eye. </div>",
+    "<div class='subtitle'> Meet Mr. FileSmith 🕵🏻‍♂️ — the gentleman who decrypts filenames and performs bulk renaming in the blink of an eye. </div>",
     unsafe_allow_html=True,
 )
 
