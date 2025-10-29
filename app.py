@@ -38,7 +38,7 @@ st.markdown(
 )
 
 # ---------------------- HEADER ----------------------
-st.markdown("<div class='main-title'>📄 Auto Name AI</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-title'> 🚀 Mr FileSmith AI</div>", unsafe_allow_html=True)
 st.markdown(
     "<div class='subtitle'> FileSmith AI. The gentleman of bulk renaming files <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>",
     unsafe_allow_html=True,
