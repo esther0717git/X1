@@ -16,7 +16,7 @@ except Exception:
 
 
 # ---------------------- PAGE SETUP ----------------------
-st.set_page_config(page_title="Auto Name AI", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Mr FileSmith - The Auto Name AI", page_icon="🚀", layout="wide")
 
 # --- Minimal CSS polish ---
 st.markdown(
@@ -40,7 +40,7 @@ st.markdown(
 # ---------------------- HEADER ----------------------
 st.markdown("<div class='main-title'>📄 Auto Name AI</div>", unsafe_allow_html=True)
 st.markdown(
-    "<div class='subtitle'>Rename using detected <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>",
+    "<div class='subtitle'> FileSmith AI. The gentleman of bulk renaming files <b>Start Date</b>, <b>End Date</b>, <b>Name</b>, and <b>Order No</b>.</div>",
     unsafe_allow_html=True,
 )
 
