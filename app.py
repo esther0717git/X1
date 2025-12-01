@@ -211,7 +211,8 @@ mode = st.radio(
 st.markdown("<div class='section-header'>📂 Upload Your PDF Files</div>", unsafe_allow_html=True)
 if mode == "Individual PDFs":
     st.markdown(
-        "<div class='info-card'>Output: <i>PaxCount | StartDate-EndDate_Code_Name_OrderNo.pdf</i></div>",
+        "<div class='info-card'>Output: <i>1.StartDate-EndDate_Code_Name_OrderNo.pdf, "
+        "2.StartDate-EndDate_Code_Name_OrderNo.pdf, ...</i></div>",
         unsafe_allow_html=True,
     )
 else:
@@ -250,10 +251,10 @@ if uploaded:
                 order = extract_order_number(text)
                 code = extract_site_code(text) or majority_code
 
-                # Pax count for a single record
-                count = 1
+                # Single record → 1.<base>
+                index = 1
                 base_filename = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
-                filename = f"{count} Pax | {base_filename}"  # UPDATED FORMAT
+                filename = f"{index}.{base_filename}"
 
                 st.success("✅ Renamed to:")
                 st.code(filename)
@@ -292,14 +293,14 @@ if uploaded:
                             first_order = order
 
                         base_fname = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
-                        fname = f"{total_pax} Pax | {base_fname}"  # UPDATED FORMAT WITH TOTAL PAX
+                        fname = f"{i}.{base_fname}"   # 1., 2., 3., ...
 
                         zf.writestr(fname, export_pages(pdf_bytes, p["from"], p["to"]))
                         st.write(f"📄 Part {i}: pages {p['from']+1}-{p['to']+1} → **{fname}**")
 
                 zip_buf.seek(0)
 
-                # ---- build pretty ZIP filename (no Pax prefix unless you want it) ----
+                # ---- build pretty ZIP filename ----
                 if overall_start and overall_end:
                     date_part = f"{overall_start.strftime('%Y.%m.%d')}-{overall_end.strftime('%m.%d')}"
                 else:
@@ -308,7 +309,10 @@ if uploaded:
                 code_part = majority_code or "UnknownCode"
                 order_part = first_order or "UnknownOrder"
 
-                zip_filename = f"Individuals - {date_part}_{code_part}_{order_part}.zip"
+                # base like 2025.12.01-12.12_SG5_1-2545....
+                base_zip_core = f"{date_part}_{code_part}_{order_part}"
+                base_zip_filename = f"{base_zip_core}.zip"
+                zip_filename = f"{total_pax} Pax | {base_zip_filename}"
 
                 st.download_button(
                     "📦 Download All as ZIP",
