@@ -211,7 +211,7 @@ mode = st.radio(
 st.markdown("<div class='section-header'>📂 Upload Your PDF Files</div>", unsafe_allow_html=True)
 if mode == "Individual PDFs":
     st.markdown(
-        "<div class='info-card'>Output: <i>StartDate-EndDate_Code_Name_OrderNo.pdf</i></div>",
+        "<div class='info-card'>Output: <i>PaxCount | StartDate-EndDate_Code_Name_OrderNo.pdf</i></div>",
         unsafe_allow_html=True,
     )
 else:
@@ -241,6 +241,7 @@ if uploaded:
             if majority_code and len(set(all_codes)) > 1:
                 st.caption(f"Note: multiple site codes detected {sorted(set(all_codes))}. Using majority code: {majority_code}.")
 
+            # ---------- SINGLE-SECTION CASE ----------
             if len(parts) == 1:
                 text = parts[0]["text"]
                 s_str, e_str = find_date_strings(text)
@@ -248,14 +249,20 @@ if uploaded:
                 name = guess_name_from_text(text)
                 order = extract_order_number(text)
                 code = extract_site_code(text) or majority_code
-                filename = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
+
+                # Pax count for a single record
+                count = 1
+                base_filename = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
+                filename = f"{count} Pax | {base_filename}"  # UPDATED FORMAT
 
                 st.success("✅ Renamed to:")
                 st.code(filename)
                 st.download_button("⬇️ Download Renamed PDF", pdf_bytes, file_name=filename, mime="application/pdf")
 
+            # ---------- MULTI-SECTION CASE (ZIP) ----------
             else:
-                st.info(f"Detected {len(parts)} sections (split by 'Start Date').")
+                total_pax = len(parts)  # number of records detected
+                st.info(f"Detected {total_pax} sections (split by 'Start Date').")
 
                 # --- compute overall metadata for ZIP name ---
                 overall_start = None
@@ -284,13 +291,15 @@ if uploaded:
                         if order and first_order is None:
                             first_order = order
 
-                        fname = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
+                        base_fname = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
+                        fname = f"{total_pax} Pax | {base_fname}"  # UPDATED FORMAT WITH TOTAL PAX
+
                         zf.writestr(fname, export_pages(pdf_bytes, p["from"], p["to"]))
                         st.write(f"📄 Part {i}: pages {p['from']+1}-{p['to']+1} → **{fname}**")
 
                 zip_buf.seek(0)
 
-                # ---- build pretty ZIP filename ----
+                # ---- build pretty ZIP filename (no Pax prefix unless you want it) ----
                 if overall_start and overall_end:
                     date_part = f"{overall_start.strftime('%Y.%m.%d')}-{overall_end.strftime('%m.%d')}"
                 else:
