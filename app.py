@@ -256,6 +256,12 @@ if uploaded:
 
             else:
                 st.info(f"Detected {len(parts)} sections (split by 'Start Date').")
+
+                # --- compute overall metadata for ZIP name ---
+                overall_start = None
+                overall_end = None
+                first_order = None
+
                 zip_buf = BytesIO()
                 with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                     for i, p in enumerate(parts, 1):
@@ -266,11 +272,41 @@ if uploaded:
                         order = extract_order_number(text)
                         code = majority_code or extract_site_code(text)
 
+                        # track earliest / latest dates for the whole batch
+                        if s_dt:
+                            if overall_start is None or s_dt < overall_start:
+                                overall_start = s_dt
+                        if e_dt:
+                            if overall_end is None or e_dt > overall_end:
+                                overall_end = e_dt
+
+                        # track first non-empty order number
+                        if order and first_order is None:
+                            first_order = order
+
                         fname = fname_dates_code_name_order(s_dt, e_dt, code, name, order)
                         zf.writestr(fname, export_pages(pdf_bytes, p["from"], p["to"]))
                         st.write(f"📄 Part {i}: pages {p['from']+1}-{p['to']+1} → **{fname}**")
+
                 zip_buf.seek(0)
-                st.download_button("📦 Download All as ZIP", zip_buf, file_name="renamed_parts.zip", mime="application/zip")
+
+                # ---- build pretty ZIP filename ----
+                if overall_start and overall_end:
+                    date_part = f"{overall_start.strftime('%Y.%m.%d')}-{overall_end.strftime('%m.%d')}"
+                else:
+                    date_part = "UnknownDate"
+
+                code_part = majority_code or "UnknownCode"
+                order_part = first_order or "UnknownOrder"
+
+                zip_filename = f"Individuals - {date_part}_{code_part}_{order_part}.zip"
+
+                st.download_button(
+                    "📦 Download All as ZIP",
+                    zip_buf,
+                    file_name=zip_filename,
+                    mime="application/zip",
+                )
 
         else:  # Merged PDFs (no splitting, rename only)
             s_dt, e_dt, order, code = extract_overall_fields(pdf_bytes)
